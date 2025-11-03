@@ -429,12 +429,12 @@ function updateCamera() {
   camera.y = Math.max(0, Math.min(MAP_H - canvas.height, camera.y));
 }
 
-// 绘制全部（地图+怪物+玩家）
+// 改正 drawGame 怪物渲染部分+drawDog
 function drawGame(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   updateCamera();
 
-  // 地图背景（格子花草）
+  // 地图背景（格子花草效果）
   ctx.save();
   ctx.fillStyle = "#ffe5ef";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -471,7 +471,7 @@ function drawGame(){
     ctx.fill(); ctx.shadowBlur=0;
   }
 
-  // 怪物（打击感闪烁、抖动动画）
+  // 怪物绘制，确保用【怪物.x - camera.x】【怪物.y - camera.y】
   for(let m of gameState.monsters){
     ctx.save();
     let scale=1, alpha=1;
@@ -487,10 +487,11 @@ function drawGame(){
     ctx.translate(m.x-camera.x, m.y-camera.y);
     ctx.scale(scale,scale);
     ctx.translate(-(m.x-camera.x),-(m.y-camera.y));
-    drawDog(0, 0, m.r, m.color, m.earColor); // 用局部坐标
+    // ★修正：drawDog必须是 drawDog(相对坐标, r, color, earColor)
+    drawDog(m.x - camera.x, m.y - camera.y, m.r, m.color, m.earColor);
     ctx.globalAlpha=1.0; ctx.filter="none"; ctx.restore();
 
-    // 怪物血量
+    // 怪物血量条也修正坐标
     ctx.save()
     ctx.strokeStyle="#ff90c4"; ctx.lineWidth=5;
     ctx.beginPath();
@@ -517,57 +518,7 @@ function drawGame(){
   hudSkills.innerHTML = `技能: ${gameState.player.skills.map(id=>SKILL_LIST.find(s=>s.id===id).name).join(", ")}`;
   expVal.style.width = `${(gameState.player.exp/gameState.player.expNext)*120}px`;
 }
-
-// 受击动画版猫猫
-function drawCat(x,y,r){
-  ctx.save();
-  let p = gameState.player;
-  let scale = 1;
-  if(p.hitAnim > 0) {
-    scale = 1 + 0.27 * Math.sin(performance.now()/66) * p.hitAnim;
-    p.hitAnim -= 0.04;
-  }
-  let alpha = 1;
-  if(p.hitFlash > 0){
-    alpha = 0.4 + 0.6*Math.abs(Math.sin(performance.now()/55));
-    ctx.filter = "brightness(2.02) contrast(1.4)";
-    p.hitFlash -= 0.045;
-  }
-  ctx.globalAlpha = alpha;
-  ctx.translate(x,y);
-  ctx.scale(scale, scale);
-  ctx.translate(-x,-y);
-
-  ctx.beginPath();
-  ctx.arc(x,y,r,0,Math.PI*2);
-  ctx.fillStyle="#fff0fb";
-  ctx.fill();
-  ctx.strokeStyle="#f58ecb"; ctx.lineWidth=4; ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x-r*0.6,y-r*0.4);
-  ctx.lineTo(x-r*1.2,y-r*1.1);
-  ctx.lineTo(x-r*0.2,y-r*0.8);
-  ctx.closePath();
-  ctx.fillStyle="#fbd3e9"; ctx.fill(); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x+r*0.6,y-r*0.4);
-  ctx.lineTo(x+r*1.2,y-r*1.1);
-  ctx.lineTo(x+r*0.2,y-r*0.8);
-  ctx.closePath();
-  ctx.fillStyle="#fbd3e9"; ctx.fill(); ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x-r*0.3, y+r*0.1, r*0.18, 0, Math.PI*2);
-  ctx.arc(x+r*0.3, y+r*0.1, r*0.18, 0, Math.PI*2);
-  ctx.fillStyle="#f58ecb"; ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x, y+r*0.3, r*0.1, 0, Math.PI*2);
-  ctx.fillStyle="#ffb7eb"; ctx.fill();
-
-  ctx.globalAlpha=1.0;
-  ctx.filter="none";
-  ctx.restore();
-}
-// 狗狗渲染（中心原点绘制）
+// drawDog，仅建议如下写法（中心原点绘制！）
 function drawDog(x,y,r,color,earColor){
   ctx.save();
   ctx.beginPath();
