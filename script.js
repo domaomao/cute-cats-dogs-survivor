@@ -1,11 +1,19 @@
-// —— 猫猫狗狗幸存者 豪华年度版升级 ——
-// 各种打击感、鼠标攻击方向、自动&鼠标射击、粒子特效、怪物速度分级、容错大幅提升
+// 猫猫狗狗幸存者 年度豪华地图+打击感升级版
+// 作者：domaomao+Copilot
+// 包含大地图自由移动、摄像机跟随、玩家受击动画、合理碰撞体积、攻速优化、打击感增强
 
+// 地图参数
+const MAP_W = 4000, MAP_H = 4000;
+
+// 屏幕画布参数
 const W = 900, H = 600;
 const canvas = document.getElementById("gameCanvas");
 canvas.width = W;
 canvas.height = H;
 const ctx = canvas.getContext("2d");
+
+// 摄像机
+let camera = { x: 0, y: 0 };
 
 const menu = document.getElementById('menu');
 const startBtn = document.getElementById('startBtn');
@@ -37,8 +45,8 @@ function hide(ele) { ele.classList.add('hidden'); }
 let mouse = { x: W/2, y: H/2, down: false };
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
-  mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-  mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width) + camera.x;
+  mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height) + camera.y;
 });
 canvas.addEventListener('mousedown', ()=>{mouse.down=true;});
 canvas.addEventListener('mouseup', ()=>{mouse.down=false;});
@@ -84,23 +92,27 @@ function getMoveDir() {
 
 // ——— 玩家初始参数及升级池 ———
 const INITIAL_PLAYER = {
-  x: W/2, y: H/2, r: 26,
-  hp: 200, maxHp: 200, speed: 4.2,
-  atk: 9,
-  bulletSpeed: 13,
-  atkDelay: 0.45,
+  x: MAP_W/2, y: MAP_H/2, r: 22, // 体积略小，更容易闪避
+  hp: 220, maxHp: 220, speed: 5.2,
+  atk: 8,
+  bulletSpeed: 10, // 子弹速度稍慢
+  atkDelay: 0.70, // 攻击间隔加长，攻速更舒服（原0.45，现0.70）
   atkRange: 180,
   skills: [],
   exp: 0,
-  expNext: 12,
+  expNext: 15,
   level: 1,
-  invincible: 0,  // 受伤无敌
   invincibleTimer: 0,
+  hitFlash: 0,
+  hitAnim: 0,
+  multiBullets: 1,
+  healTick: false,
   score: 0,
 };
+
 const SKILL_LIST = [
   { id:'atkUp', name:'攻击力↑', desc:'攻击力+5', apply: p => p.atk+=5 },
-  { id:'atkSpeed', name:'攻速↑', desc:'攻速提升', apply: p=>p.atkDelay*=0.85 },
+  { id:'atkSpeed', name:'攻速↑', desc:'攻速提升（快10%）', apply: p=>p.atkDelay*=0.90 },
   { id:'moveUp', name:'速度↑', desc:'移动速度+30%', apply: p=>p.speed*=1.3 },
   { id:'hpUp', name:'血量↑', desc:'血量+60', apply: p=>{p.maxHp+=60; p.hp=p.maxHp;} },
   { id:'rangeUp', name:'射程↑', desc:'攻击射程+50', apply: p=>p.atkRange+=50 },
@@ -111,7 +123,7 @@ const SKILL_LIST = [
 
 function startGame() {
   gameState = {
-    player: {...INITIAL_PLAYER, multiBullets: 1, healTick: false},
+    player: {...INITIAL_PLAYER},
     monsters: [],
     bullets: [],
     exps: [],
@@ -125,8 +137,8 @@ function startGame() {
     score: 0,
     gameOver: false,
     paused: false,
-    particles: [], // 粒子特效
-    killCombo: 0, comboTimer: 0 // 连击打击感
+    particles: [], // 打击特效
+    killCombo: 0, comboTimer: 0 // 连击动画
   };
   hide(levelupBox); hide(gameOverBox);
   resizeCanvas();
@@ -166,25 +178,25 @@ function updateGame(dt) {
   let gs = gameState;
   if(gs.player.healTick){
     gs.player._healTimer = (gs.player._healTimer||0)+dt;
-    if(gs.player._healTimer>5){ gs.player.hp=Math.min(gs.player.maxHp, gs.player.hp+10); gs.player._healTimer=0;}
+    if(gs.player._healTimer>4){ gs.player.hp=Math.min(gs.player.maxHp, gs.player.hp+12); gs.player._healTimer=0;}
   }
   gs.time += dt;
   gs.comboTimer -= dt;
   if(gs.comboTimer<=0) gs.killCombo=0;
 
-  // 玩家移动
+  // 玩家移动（地图边界检测）
   let move = getMoveDir();
   gs.player.x += move.dx * gs.player.speed;
   gs.player.y += move.dy * gs.player.speed;
-  gs.player.x = Math.max(gs.player.r, Math.min(canvas.width-gs.player.r, gs.player.x));
-  gs.player.y = Math.max(gs.player.r, Math.min(canvas.height-gs.player.r, gs.player.y));
+  gs.player.x = Math.max(gs.player.r, Math.min(MAP_W-gs.player.r, gs.player.x));
+  gs.player.y = Math.max(gs.player.r, Math.min(MAP_H-gs.player.r, gs.player.y));
 
   // 怪物生成（分级速度&血量）
   gs.monsterSpawnTimer -= dt;
-  let baseSpeed = 1 + gs.time/80;
-  let spawnSpeed = Math.max(1.3, 3.2 - gs.time/120); // 延后更快
+  let baseSpeed = 1 + gs.time/160;
+  let spawnSpeed = Math.max(1.1, 3.3 - gs.time/160);
   if(gs.monsterSpawnTimer<0) {
-    gs.monsterSpawnTimer = spawnSpeed+Math.random()*0.75;
+    gs.monsterSpawnTimer = spawnSpeed+Math.random()*0.85;
     spawnMonster(gs, baseSpeed);
   }
 
@@ -192,19 +204,17 @@ function updateGame(dt) {
   for(let m of gs.monsters) {
     if(m.hitFlash>0){m.hitFlash-=dt;}
     let dx = gs.player.x - m.x, dy = gs.player.y - m.y;
-    let dist = Math.sqrt(dx*dx+dy*dy);
+    let dist = Math.sqrt(dx*dx+dy*dy)+0.01;
     let speed = m.speed;
     m.x += dx/dist * speed;
     m.y += dy/dist * speed;
   }
 
-  // 攻击（鼠标控制方向，自动&点射）
+  // 攻击（鼠标方向，自动连发）
   gs.lastAtk += dt;
   if(gs.lastAtk > gs.player.atkDelay) {
-    if(mouse.down || true) { // 可以实现鼠标点射，或恒自动
-      gs.lastAtk = 0;
-      shootBullet(gs, mouse.x, mouse.y);
-    }
+    gs.lastAtk = 0;
+    shootBullet(gs, mouse.x, mouse.y);
   }
 
   // 子弹移动+命中
@@ -224,12 +234,12 @@ function updateGame(dt) {
         m.hp -= gs.player.atk;
         b.lifetime = 0;
         m.hitFlash = 0.15;
-        m.vx = dx/dis*16; m.vy=dy/dis*16; // 击退
-        spawnParticles(gs, m.x, m.y, m.r, "#fa99d6", 13);
+        m.vx = dx/dis*14; m.vy=dy/dis*14; // 击退
+        spawnParticles(gs, m.x, m.y, m.r, "#fa99d6", 11);
         if(m.hp<=0){
-          m.dead = true; m.deathAnim=0.18; gs.score+=1;
+          m.dead = true; m.deathAnim=0.20; gs.score+=1;
           gs.killCombo+=1; gs.comboTimer=0.8;
-          spawnParticles(gs, m.x, m.y, m.r+8, "#ff90c4", 18);
+          spawnParticles(gs, m.x, m.y, m.r+8, "#ff90c4", 15);
           spawnExp(gs, m.x, m.y);
         }
       }
@@ -237,23 +247,22 @@ function updateGame(dt) {
   }
   gs.monsters.forEach(m=>{
     if(m.vx || m.vy){
-      m.x += m.vx*0.33; m.y += m.vy*0.33; m.vx*=0.66; m.vy*=0.66; // 击退衰减
+      m.x += m.vx*0.30; m.y += m.vy*0.30; m.vx*=0.70; m.vy*=0.70;
       if(Math.abs(m.vx)+Math.abs(m.vy)<1){m.vx=0;m.vy=0;}
     }
     if(m.deathAnim){ m.deathAnim-=dt; }
   });
   gs.monsters = gs.monsters.filter(m=>!m.deathAnim);
 
-  // 怪物碰玩家
+  // 怪物碰玩家（受击动画+体积优化）
   if(gs.player.invincibleTimer>0){gs.player.invincibleTimer-=dt;}
   for(let m of gs.monsters) {
     let dx = m.x - gs.player.x, dy = m.y - gs.player.y;
     let dis = Math.sqrt(dx*dx+dy*dy);
+    // 体积更小,受击有击退动画/闪烁/无敌帧
     if(dis < m.r + gs.player.r && gs.player.invincibleTimer<=0) {
-      gs.player.hp -= Math.max(6, m.atk);
-      gs.player.invincibleTimer = 0.8; // 碰撞无敌
-      gs.player.x -= dx/dis*36; gs.player.y -= dy/dis*18; // 主角被击退
-      spawnParticles(gs, gs.player.x, gs.player.y, 18, "#fff0fb", 10);
+      onPlayerHit(Math.max(8, m.atk), dx, dy); // 体积/r更小，击退更明显
+      spawnParticles(gs, gs.player.x, gs.player.y, 14, "#fff0fb", 7);
     }
   }
 
@@ -261,7 +270,7 @@ function updateGame(dt) {
   for(let e of gs.exps) {
     let dx = e.x - gs.player.x, dy = e.y - gs.player.y;
     let dis = Math.sqrt(dx*dx+dy*dy);
-    if(dis < gs.player.r + e.r + 6) {
+    if(dis < gs.player.r + e.r + 7) {
       gs.player.exp += e.val;
       e.gone = true;
       if(gs.player.exp >= gs.player.expNext) {
@@ -287,19 +296,38 @@ function updateGame(dt) {
   });
 }
 
+// 玩家受击动画与击退
+function onPlayerHit(damage, dx=0, dy=0) {
+  let p = gameState.player;
+  p.hp -= damage;
+  p.invincibleTimer = 0.95;
+  p.hitFlash = 0.18;
+  p.hitAnim = 0.20;
+  // 击退动画
+  p.x -= dx/Math.sqrt(dx*dx+dy*dy||1)*30;
+  p.y -= dy/Math.sqrt(dx*dx+dy*dy||1)*12;
+  // 限制在地图内
+  p.x = Math.max(p.r, Math.min(MAP_W-p.r, p.x));
+  p.y = Math.max(p.r, Math.min(MAP_H-p.r, p.y));
+}
+
 // 怪物分级速度、血量
 function spawnMonster(gs, baseSpeed){
-  let angle = Math.random()*Math.PI*2;
-  let mx = Math.cos(angle)*canvas.width*0.48 + canvas.width/2;
-  let my = Math.sin(angle)*canvas.height*0.48 + canvas.height/2;
-  // monster分级
-  let waveLv = 1+Math.floor(gs.time/45);
+  // 随机大地图边缘生成
+  let side = Math.floor(Math.random()*4);
+  let mx, my;
+  if(side===0){mx=Math.random()*MAP_W;my=18;}
+  else if(side===1){mx=Math.random()*MAP_W;my=MAP_H-18;}
+  else if(side===2){mx=18;my=Math.random()*MAP_H;}
+  else{mx=MAP_W-18;my=Math.random()*MAP_H;}
+  // 分级怪物参数
+  let waveLv = 1+Math.floor(gs.time/55);
   let monsterTypes = [
-    {r:20, hp:18+waveLv*4, speed:baseSpeed+Math.random()*0.7, atk:7 },
-    {r:34, hp:48+waveLv*12, speed:baseSpeed*0.68, atk:18 },
-    {r:12, hp:8+waveLv*2, speed:baseSpeed*1.38+Math.random()*0.5, atk:4 }
+    {r:18, hp:18+waveLv*4, speed:baseSpeed+Math.random(), atk:9 },
+    {r:34, hp:54+waveLv*13, speed:baseSpeed*0.73, atk:18 },
+    {r:13, hp:7+waveLv*2, speed:baseSpeed*1.5+Math.random()*0.4, atk:4 }
   ];
-  let mt = monsterTypes[Math.random()<0.6?0:(Math.random()<0.8?1:2)];
+  let mt = monsterTypes[Math.random()<0.62?0:(Math.random()<0.83?1:2)];
   let dog = {
     x: mx, y: my,
     r: mt.r,
@@ -325,14 +353,14 @@ function shootBullet(gs, tx, ty){
   let p=gs.player, bullets=[];
   let shotNum=p.multiBullets||1;
   for(let i=0;i<shotNum;i++){
-    let angle = Math.atan2(ty-p.y,tx-p.x)+((i-(shotNum-1)/2)*0.20);
+    let angle = Math.atan2(ty-p.y,tx-p.x)+((i-(shotNum-1)/2)*0.18);
     let vx = Math.cos(angle)*p.bulletSpeed;
     let vy = Math.sin(angle)*p.bulletSpeed;
     bullets.push({
       x: p.x + Math.cos(angle)*p.r,
       y: p.y + Math.sin(angle)*p.r,
       vx: vx, vy: vy,
-      r: 8,
+      r: 7,
       color: "#fb7eeb",
       lifetime: Math.round(p.atkRange/Math.abs(vx+vy)*2),
     });
@@ -361,7 +389,7 @@ function showLevelupBox(){
       gameState.player.skills.push(s.id);
       gameState.player.level += 1;
       gameState.player.exp = 0;
-      gameState.player.expNext += 13+Math.floor(gameState.player.level*2.9);
+      gameState.player.expNext += 17+Math.floor(gameState.player.level*3.2);
       hide(levelupBox); resumeGame(); gameState.levelupReady = false; gameState.levelupChoices = [];
     };
     levelupChoices.appendChild(btn);
@@ -387,23 +415,46 @@ function spawnParticles(gs, x, y, r, color, count){
       vx:Math.cos(angle)*speed,
       vy:Math.sin(angle)*speed,
       color,
-      r:1.9+Math.random()*2.5,
+      r:1.7+Math.random()*2.8,
       life:0.17+Math.random()*0.22,
     });
   }
 }
 
-// 绘制全部
+// 摄像机跟随
+function updateCamera() {
+  camera.x = gameState.player.x - canvas.width / 2;
+  camera.y = gameState.player.y - canvas.height / 2;
+  camera.x = Math.max(0, Math.min(MAP_W - canvas.width, camera.x));
+  camera.y = Math.max(0, Math.min(MAP_H - canvas.height, camera.y));
+}
+
+// 绘制全部（地图+怪物+玩家）
 function drawGame(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
+  updateCamera();
+
+  // 地图背景（格子花草）
   ctx.save();
-  ctx.fillStyle="#ffe5ef";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#ffe5ef";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let gx = 0; gx < MAP_W; gx += 98) {
+    for (let gy = 0; gy < MAP_H; gy += 98) {
+      let sx = gx - camera.x, sy = gy - camera.y;
+      if (sx < -40 || sy < -40 || sx > canvas.width+40 || sy > canvas.height+40) continue;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 6, 0, Math.PI*2);
+      ctx.fillStyle="#fb7eeb";
+      ctx.globalAlpha=0.09;
+      ctx.fill(); ctx.globalAlpha=1.0;
+    }
+  }
+  ctx.restore();
 
   // 粒子动画
   for(let p of gameState.particles){
     ctx.beginPath();
-    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.arc(p.x-camera.x, p.y-camera.y, p.r, 0, Math.PI*2);
     ctx.fillStyle=p.color;
     ctx.globalAlpha = Math.max(0.30,p.life/0.38);
     ctx.fill();
@@ -413,47 +464,49 @@ function drawGame(){
   // 经验球
   for(let e of gameState.exps){
     ctx.beginPath();
-    ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+    ctx.arc(e.x-camera.x, e.y-camera.y, e.r, 0, Math.PI*2);
     ctx.fillStyle=e.color;
     ctx.shadowColor="#fff";
-    ctx.shadowBlur=9;
+    ctx.shadowBlur=7;
     ctx.fill(); ctx.shadowBlur=0;
   }
 
-  // 怪物（打击感闪、死亡动画缩放）
+  // 怪物（打击感闪烁、抖动动画）
   for(let m of gameState.monsters){
     ctx.save();
+    let scale=1, alpha=1;
     if(m.hitFlash>0){
-      ctx.globalAlpha=0.55+Math.sin(performance.now()/33)%0.25;
-      ctx.filter="brightness(1.9)";
-      ctx.translate(m.x,m.y);
-      ctx.scale(1.13,1.13);
-      ctx.translate(-m.x,-m.y);
+      scale=1.13; ctx.filter="brightness(1.7)"; alpha=0.66;
     }
     if(m.deathAnim>0) {
-      ctx.translate(m.x,m.y);
-      ctx.scale(m.deathAnim, m.deathAnim);
-      ctx.translate(-m.x,-m.y);
+      scale=m.deathAnim;
+      ctx.filter="brightness(2)";
+      alpha=0.55;
     }
-    drawDog(m.x, m.y, m.r, m.color, m.earColor);
-    ctx.restore();
+    ctx.globalAlpha=alpha;
+    ctx.translate(m.x-camera.x, m.y-camera.y);
+    ctx.scale(scale,scale);
+    ctx.translate(-(m.x-camera.x),-(m.y-camera.y));
+    drawDog(0, 0, m.r, m.color, m.earColor); // 用局部坐标
+    ctx.globalAlpha=1.0; ctx.filter="none"; ctx.restore();
+
     // 怪物血量
     ctx.save()
     ctx.strokeStyle="#ff90c4"; ctx.lineWidth=5;
     ctx.beginPath();
-    ctx.moveTo(m.x-m.r/1.2,m.y-m.r-6);
-    ctx.lineTo(m.x-m.r/1.2+m.r*2*m.hp/m.maxhp,m.y-m.r-6);
-    ctx.globalAlpha=0.8;
+    ctx.moveTo(m.x-camera.x-m.r/1.2,m.y-camera.y-m.r-6);
+    ctx.lineTo(m.x-camera.x-m.r/1.2+m.r*2*m.hp/m.maxhp,m.y-camera.y-m.r-6);
+    ctx.globalAlpha=0.7;
     ctx.stroke();
     ctx.globalAlpha=1.0;
     ctx.restore();
   }
-  // 玩家角色
-  drawCat(gameState.player.x,gameState.player.y,gameState.player.r);
+  // 玩家角色带受击动效
+  drawCat(gameState.player.x-camera.x,gameState.player.y-camera.y,gameState.player.r);
 
   // 子弹
   for(let b of gameState.bullets){
-    drawBullet(b);
+    drawBullet(b.x-camera.x, b.y-camera.y, b.r, b.color);
   }
   ctx.restore();
 
@@ -465,8 +518,26 @@ function drawGame(){
   expVal.style.width = `${(gameState.player.exp/gameState.player.expNext)*120}px`;
 }
 
+// 受击动画版猫猫
 function drawCat(x,y,r){
   ctx.save();
+  let p = gameState.player;
+  let scale = 1;
+  if(p.hitAnim > 0) {
+    scale = 1 + 0.27 * Math.sin(performance.now()/66) * p.hitAnim;
+    p.hitAnim -= 0.04;
+  }
+  let alpha = 1;
+  if(p.hitFlash > 0){
+    alpha = 0.4 + 0.6*Math.abs(Math.sin(performance.now()/55));
+    ctx.filter = "brightness(2.02) contrast(1.4)";
+    p.hitFlash -= 0.045;
+  }
+  ctx.globalAlpha = alpha;
+  ctx.translate(x,y);
+  ctx.scale(scale, scale);
+  ctx.translate(-x,-y);
+
   ctx.beginPath();
   ctx.arc(x,y,r,0,Math.PI*2);
   ctx.fillStyle="#fff0fb";
@@ -491,8 +562,12 @@ function drawCat(x,y,r){
   ctx.beginPath();
   ctx.arc(x, y+r*0.3, r*0.1, 0, Math.PI*2);
   ctx.fillStyle="#ffb7eb"; ctx.fill();
+
+  ctx.globalAlpha=1.0;
+  ctx.filter="none";
   ctx.restore();
 }
+// 狗狗渲染（中心原点绘制）
 function drawDog(x,y,r,color,earColor){
   ctx.save();
   ctx.beginPath();
@@ -514,12 +589,13 @@ function drawDog(x,y,r,color,earColor){
   ctx.fillStyle = "#fb7e8f"; ctx.fill();
   ctx.restore();
 }
-function drawBullet(b){
+// 子弹绘制
+function drawBullet(x, y, r, color){
   ctx.save();
   ctx.beginPath();
-  ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
-  ctx.fillStyle = b.color;
-  ctx.shadowColor = "#fa99d6"; ctx.shadowBlur = 8;
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.shadowColor = "#fa99d6"; ctx.shadowBlur = 6;
   ctx.fill(); ctx.shadowBlur=0; ctx.restore();
 }
 
