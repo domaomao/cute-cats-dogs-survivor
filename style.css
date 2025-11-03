@@ -1,0 +1,60 @@
+body {
+  margin: 0; background: linear-gradient(135deg,#fbd3e9 0%,#fccde2 100%);
+  font-family: "Comic Sans MS", "Arial Rounded MT Bold", Arial, sans-serif;
+}
+#game {
+  display: block;
+  margin: 35px auto 0 auto;
+  background: #fff0fb;
+  box-shadow: 0 0 60px 18px #ffb7eb80;
+  border-radius: 25px;
+}
+#ui {
+  position: absolute;
+  left: 20px; top: 22px;
+  z-index: 10;
+  color: #ff69b4;
+  font-size: 22px;
+  background: #ffd6ecbb;
+  border-radius: 14px;
+  padding: 15px 22px;
+  box-shadow: 0 0 32px #fccde2;
+}
+.title {
+  font-size: 2em;
+  font-weight: bold;
+  color: #fa59be;
+  text-shadow: 2px 1px 9px #fff;
+  margin-bottom: 15px;
+  letter-spacing: 1px;
+}
+#stats {
+  margin: 12px 0;
+  font-size: 1.1em;
+  color: #ff79c0;
+}
+#gameover {
+  margin-top: 38px;
+  background: linear-gradient(135deg,#fccde2 60%,#e7b1c7 100%);
+  border-radius: 13px;
+  padding: 12px 23px;
+  text-align: center;
+  font-weight: bold;
+  color: #f44292;
+  box-shadow: 0 0 12px #fbd3e9;
+}
+#gameover .over-text {
+  font-size: 2em;
+  margin-bottom: 15px;
+}
+#gameover button {
+  background: #fa8bb9;
+  color: white;
+  font-size: 1.2em;
+  border-radius: 9px;
+  border: none;
+  padding: 8px 22px;
+  box-shadow: 1px 1px 8px #f7c6e4;
+  cursor: pointer;
+}
+#gameover button:hover { background: #ffb7eb; }
