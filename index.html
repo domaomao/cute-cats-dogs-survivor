@@ -2,19 +2,50 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>喵喵勇者·可爱生存战</title>
+  <title>猫猫狗狗幸存者</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="ui">
-    <div class="title">🐾 喵喵勇者 · 可爱生存战 🐶</div>
-    <div id="stats"></div>
-    <div id="gameover" style="display:none">
-      <div class="over-text">喵呜！猫猫晕倒了！</div>
-      <button onclick="restartGame()">再来一局！</button>
+  <div id="menu" class="screen">
+    <h1>猫猫狗狗幸存者</h1>
+    <button id="startBtn">开始游戏</button>
+    <button id="aboutBtn">游戏说明</button>
+    <button id="authorBtn">作者信息</button>
+    <div id="aboutText" class="hidden">
+      <p>控制猫猫移动，自动攻击狗狗，收集经验球升级！</p>
+      <p>每次升级可选技能或属性，多样成长！</p>
+      <p>坚守生存，挑战高分！</p>
+      <button id="backBtn1">返回菜单</button>
+    </div>
+    <div id="authorText" class="hidden">
+      <p>作者：domaomao</p>
+      <p>基于吸血鬼幸存者玩法设计，粉色猫猫狗狗风格。</p>
+      <p>欢迎改进和二创！</p>
+      <button id="backBtn2">返回菜单</button>
     </div>
   </div>
-  <canvas id="game"></canvas>
+  <div id="gameUI" class="screen hidden">
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
+      <span id="time"></span>
+      <span id="score"></span>
+      <span id="health"></span>
+      <span id="expbar"><span id="expval"></span></span>
+      <span id="skills"></span>
+    </div>
+    <button id="pauseBtn">暂停</button>
+  </div>
+  <div id="levelupBox" class="hidden">
+    <h2>升级！请选择一个技能或属性</h2>
+    <div id="levelupChoices"></div>
+  </div>
+  <div id="gameOverBox" class="hidden">
+    <h2>游戏结束</h2>
+    <p id="finalScore"></p>
+    <button id="restartBtn">重新开始</button>
+    <button id="backToMenuBtn">返回主菜单</button>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>
