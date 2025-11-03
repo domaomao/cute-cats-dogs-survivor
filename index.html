@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>猫猫 VS 狗狗 粉色幸存者</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #fbd3e9; }
+    canvas { display: block; margin: auto; background: #ffe5ef; box-shadow: 0 0 42px 10px #fccde2; border-radius: 18px; }
+    #ui { position: absolute; left: 20px; top: 20px; color: #ff69b4; font-size: 21px; font-family: "Comic Sans MS", "Arial Rounded MT Bold", Arial, sans-serif; text-shadow: 1px 1px 6px #fff; }
+  </style>
+</head>
+<body>
+<div id="ui"></div>
+<canvas id="game"></canvas>
+<script>
+const W = 850, H = 650;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = W;
+canvas.height = H;
+let ui = document.getElementById('ui');
+
+// 猫猫玩家
+let player = {
+  x: W/2, y: H/2,
+  r: 26,
+  speed: 4.2,
+  hp: 100,
+  score: 0
+};
+
+// 狗狗敌人
+let monsters = [];
+let monsterSpawnTimer = 0;
+
+// 控制
+let keys = {};
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// 绘制可爱猫猫
+function drawCat(x, y, r) {
+  // 主体
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = "#fff0fb";
+  ctx.fill();
+  ctx.strokeStyle = "#f58ecb";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  // 耳朵
+  ctx.save();
+  ctx.translate(x, y);
+  // 左耳
+  ctx.beginPath();
+  ctx.moveTo(-r*0.6, -r*0.4);
+  ctx.lineTo(-r*1.2, -r*1.1);
+  ctx.lineTo(-r*0.2, -r*0.8);
+  ctx.closePath();
+  ctx.fillStyle = "#fbd3e9";
+  ctx.fill();
+  ctx.strokeStyle = "#f58ecb";
+  ctx.stroke();
+  // 右耳
+  ctx.beginPath();
+  ctx.moveTo(r*0.6, -r*0.4);
+  ctx.lineTo(r*1.2, -r*1.1);
+  ctx.lineTo(r*0.2, -r*0.8);
+  ctx.closePath();
+  ctx.fillStyle = "#fbd3e9";
+  ctx.fill();
+  ctx.strokeStyle = "#f58ecb";
+  ctx.stroke();
+  // 脸部
+  // 眼睛
+  ctx.beginPath();
+  ctx.arc(-r*0.3, r*0.1, r*0.18, 0, Math.PI*2);
+  ctx.arc(r*0.3, r*0.1, r*0.18, 0, Math.PI*2);
+  ctx.fillStyle = "#f58ecb";
+  ctx.fill();
+  // 鼻子
+  ctx.beginPath();
+  ctx.arc(0, r*0.3, r*0.1, 0, Math.PI*2);
+  ctx.fillStyle = "#ffb7eb";
+  ctx.fill();
+  ctx.restore();
+}
+
+// 绘制狗狗
+function drawDog(x, y, r) {
+  // 主体
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = "#ffeaa7";
+  ctx.fill();
+  ctx.strokeStyle = "#ff90c4";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // 耳朵
+  ctx.save();
+  ctx.translate(x, y);
+  // 左耳（下垂的）
+  ctx.beginPath();
+  ctx.ellipse(-r*0.8, -r*0.3, r*0.3, r*0.7, Math.PI/8, 0, Math.PI*2);
+  ctx.fillStyle = "#f3a683";
+  ctx.fill();
+  // 右耳
+  ctx.beginPath();
+  ctx.ellipse(r*0.8, -r*0.3, r*0.3, r*0.7, -Math.PI/8, 0, Math.PI*2);
+  ctx.fillStyle = "#f3a683";
+  ctx.fill();
+  // 脸部
+  // 眼睛
+  ctx.beginPath();
+  ctx.arc(-r*0.24, r*0.13, r*0.14, 0, Math.PI*2);
+  ctx.arc(r*0.24, r*0.13, r*0.14, 0, Math.PI*2);
+  ctx.fillStyle = "#ff90c4";
+  ctx.fill();
+  // 鼻头
+  ctx.beginPath();
+  ctx.arc(0, r*0.35, r*0.11, 0, Math.PI*2);
+  ctx.fillStyle = "#fb7e8f";
+  ctx.fill();
+  ctx.restore();
+}
+
+// 游戏主循环
+function loop() {
+  // 玩家移动
+  if (keys['w']||keys['arrowup']) player.y -= player.speed;
+  if (keys['s']||keys['arrowdown']) player.y += player.speed;
+  if (keys['a']||keys['arrowleft']) player.x -= player.speed;
+  if (keys['d']||keys['arrowright']) player.x += player.speed;
+  // 限制在屏幕内
+  player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+
+  // 狗狗怪物生成
+  monsterSpawnTimer--;
+  if (monsterSpawnTimer < 0) {
+    const angle = Math.random()*Math.PI*2;
+    const mx = Math.cos(angle)*W/2.1 + W/2;
+    const my = Math.sin(angle)*H/2.1 + H/2;
+    monsters.push({x: mx, y: my, r: 22, speed: 1.1 + Math.random()*2.1});
+    monsterSpawnTimer = 35;
+  }
+
+  // 狗狗靠近猫猫&碰撞检测
+  for (let m of monsters) {
+    const dx = player.x - m.x, dy = player.y - m.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    m.x += dx/dist * m.speed;
+    m.y += dy/dist * m.speed;
+    // 玩家被撞
+    if (dist < m.r + player.r) {
+      player.hp -= 0.7;
+    }
+  }
+
+  // 清除被击杀狗狗
+  monsters = monsters.filter(m => {
+    const dx = player.x - m.x, dy = player.y - m.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if (dist < player.r + m.r-6) {
+      player.score++;
+      return false;
+    }
+    return true;
+  });
+
+  // 游戏结束判定
+  if (player.hp <= 0) {
+    ui.innerHTML = `<span style="font-size:2em;">喵呜！猫猫晕倒了！<br>分数: ${player.score}</span><br>刷新可重新开始`;
+    ctx.fillStyle = '#fccde2dd';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#f58ecb';
+    ctx.font = '50px "Comic Sans MS", "Arial Rounded MT Bold", Arial';
+    ctx.fillText('Game Over （猫猫晕倒啦）', W/2-230,H/2);
+    return;
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// 绘制所有内容
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  // 玩家猫猫
+  drawCat(player.x, player.y, player.r);
+
+  // 狗狗怪物
+  for (let m of monsters) {
+    drawDog(m.x, m.y, m.r);
+  }
+  // 可爱粉色UI
+  ui.innerHTML =
+    `<span style="background:#ffb7eb33;padding:5px;border-radius:8px;box-shadow:0 0 10px #fccde2;">`
+    +`🐱猫猫生命：<b>${Math.max(0,player.hp).toFixed(0)}</b>　🎀分数：<b>${player.score}</b>　🐶剩余狗狗：${monsters.length}`
+    +`</span>
+    <br><span style="color:#fa59be;">用 <b>WASD/方向键</b> 控制猫猫移动，碰到狗狗得分！</span>`;
+}
+
+// 启动
+loop();
+</script>
+</body>
+</html>
